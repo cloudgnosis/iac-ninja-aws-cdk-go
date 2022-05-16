@@ -35,7 +35,15 @@ func main() {
 	taskDefId := fmt.Sprintf("taskdef-%s", *taskConfig.Family)
 	taskdef := containers.NewTaskDefinitionWithContainer(stack, &taskDefId, taskConfig, containerConfig)
 	serviceId := fmt.Sprintf("service-%s", *taskConfig.Family)
-	containers.NewService(stack, &serviceId, cluster, taskdef, jsii.Number(80), jsii.Number(0), nil)
+	containers.NewService(
+		stack,
+		&serviceId,
+		cluster,
+		taskdef, 
+		jsii.Number(80),
+		jsii.Number(0),
+		jsii.Bool(true),
+		nil)
 
 	app.Synth(nil)
 }

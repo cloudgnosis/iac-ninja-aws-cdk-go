@@ -7,6 +7,7 @@ import (
 	"fmt"
 	ec2 "github.com/aws/aws-cdk-go/awscdk/v2/awsec2"
 	ecs "github.com/aws/aws-cdk-go/awscdk/v2/awsecs"
+	logs "github.com/aws/aws-cdk-go/awscdk/v2/awslogs"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
 )
@@ -43,8 +44,15 @@ func NewTaskDefinitionWithContainer(
 		});
 
 		image := ecs.ContainerImage_FromRegistry(containerConfig.DockerhubImage, nil)
+		logdriver := ecs.LogDriver_AwsLogs(&ecs.AwsLogDriverProps{
+			StreamPrefix: taskConfig.Family,
+			LogRetention: logs.RetentionDays_ONE_DAY,
+		})
 		containerId := jsii.String(fmt.Sprintf("container-%s", *containerConfig.DockerhubImage))
-		taskdef.AddContainer(containerId, &ecs.ContainerDefinitionOptions{ Image: image })
+		taskdef.AddContainer(containerId, &ecs.ContainerDefinitionOptions{
+			Image: image,
+			Logging: logdriver,
+		 })
 
 	return taskdef
 }
@@ -56,6 +64,7 @@ func NewService(
 	taskDef ecs.FargateTaskDefinition,
 	port *float64,
 	desiredCount *float64,
+	assignPublicIp *bool,
 	serviceName *string) ecs.FargateService {
 		sgid := fmt.Sprintf("%s-security-group", *id)
 		sgdesc := "Security group for service "
@@ -77,6 +86,7 @@ func NewService(
 			CircuitBreaker: &ecs.DeploymentCircuitBreaker{
 				Rollback: jsii.Bool(true),
 			},
+			AssignPublicIp: assignPublicIp,
 		})
 		return service
 	}
