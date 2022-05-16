@@ -22,7 +22,7 @@ func main() {
 	})
 
 	var id = "my-test-cluster"
-	containers.NewCluster(stack, jsii.String(id), vpc)
+	cluster := containers.NewCluster(stack, jsii.String(id), vpc)
 
 	taskConfig := containers.TaskConfig {
 		Cpu: jsii.Number(512),
@@ -33,7 +33,9 @@ func main() {
 		DockerhubImage: jsii.String("httpd"),
 	}
 	taskDefId := fmt.Sprintf("taskdef-%s", *taskConfig.Family)
-	containers.NewTaskDefinitionWithContainer(stack, &taskDefId, taskConfig, containerConfig)
+	taskdef := containers.NewTaskDefinitionWithContainer(stack, &taskDefId, taskConfig, containerConfig)
+	serviceId := fmt.Sprintf("service-%s", *taskConfig.Family)
+	containers.NewService(stack, &serviceId, cluster, taskdef, jsii.Number(80), jsii.Number(0), nil)
 
 	app.Synth(nil)
 }

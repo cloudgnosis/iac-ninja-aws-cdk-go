@@ -47,5 +47,36 @@ func NewTaskDefinitionWithContainer(
 		taskdef.AddContainer(containerId, &ecs.ContainerDefinitionOptions{ Image: image })
 
 	return taskdef
-
 }
+
+func NewService(
+	scope constructs.Construct,
+	id *string,
+	cluster ecs.Cluster,
+	taskDef ecs.FargateTaskDefinition,
+	port *float64,
+	desiredCount *float64,
+	serviceName *string) ecs.FargateService {
+		sgid := fmt.Sprintf("%s-security-group", *id)
+		sgdesc := "Security group for service "
+		if serviceName != nil {
+			sgdesc += *serviceName
+		}
+		sg := ec2.NewSecurityGroup(scope, jsii.String(sgid), &ec2.SecurityGroupProps{
+			Description: jsii.String(sgdesc),
+			Vpc: cluster.Vpc(),
+		})
+		sg.AddIngressRule(ec2.Peer_AnyIpv4(), ec2.Port_Tcp(port), nil, nil)
+
+		service := ecs.NewFargateService(scope, id, &ecs.FargateServiceProps{
+			Cluster: cluster,
+			TaskDefinition: taskDef,
+			DesiredCount: desiredCount,
+			ServiceName: serviceName,
+			SecurityGroups: &[]ec2.ISecurityGroup{ sg },
+			CircuitBreaker: &ecs.DeploymentCircuitBreaker{
+				Rollback: jsii.Bool(true),
+			},
+		})
+		return service
+	}
