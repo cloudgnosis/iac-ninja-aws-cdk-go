@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	cdk "github.com/aws/aws-cdk-go/awscdk/v2"
 	ec2 "github.com/aws/aws-cdk-go/awscdk/v2/awsec2"
@@ -22,6 +23,18 @@ func main() {
 
 	var id = "my-test-cluster"
 	containers.NewCluster(stack, jsii.String(id), vpc)
+
+	taskConfig := containers.TaskConfig {
+		Cpu: jsii.Number(512),
+		MemoryLimitMB: jsii.Number(1024),
+		Family: jsii.String("webserver"),
+	}
+	containerConfig := containers.ContainerConfig {
+		DockerhubImage: jsii.String("httpd"),
+	}
+	taskDefId := fmt.Sprintf("taskdef-%s", *taskConfig.Family)
+	containers.NewTaskDefinitionWithContainer(stack, &taskDefId, taskConfig, containerConfig)
+
 	app.Synth(nil)
 }
 
