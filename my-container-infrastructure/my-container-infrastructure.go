@@ -6,6 +6,7 @@ import (
 	ec2 "github.com/aws/aws-cdk-go/awscdk/v2/awsec2"
 	//"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
+	"my-container-infrastructure/containers"
 )
 
 func main() {
@@ -15,10 +16,12 @@ func main() {
 		Env: env(),
 	})
 
-	ec2.Vpc_FromLookup(stack, jsii.String("vpc"), &ec2.VpcLookupOptions {
+	vpc := ec2.Vpc_FromLookup(stack, jsii.String("vpc"), &ec2.VpcLookupOptions {
 		IsDefault: jsii.Bool(true),
 	})
 
+	var id = "my-test-cluster"
+	containers.NewCluster(stack, jsii.String(id), vpc)
 	app.Synth(nil)
 }
 
