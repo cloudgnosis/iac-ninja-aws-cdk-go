@@ -46,7 +46,7 @@ func main() {
 	taskDefId := fmt.Sprintf("taskdef-%s", *taskConfig.Family)
 	taskdef := containers.NewTaskDefinitionWithContainer(stack, &taskDefId, taskConfig, containerConfig)
 	serviceId := fmt.Sprintf("service-%s", *taskConfig.Family)
-	containers.NewLoadBalancedService(
+	service := containers.NewLoadBalancedService(
 		stack,
 		&serviceId,
 		cluster,
@@ -55,6 +55,17 @@ func main() {
 		jsii.Number(2),
 		jsii.Bool(true),
 		nil)
+
+	containers.SetServiceScaling(service.Service(), &containers.ServiceScalingConfig{
+		MinCount: jsii.Number(1),
+		MaxCount: jsii.Number(4),
+		ScaleCpuTarget: &containers.ScalingThreshold{
+			Percent: jsii.Number(50),
+		},
+		ScaleMemoryTarget: &containers.ScalingThreshold{
+			Percent: jsii.Number(70),
+		},
+	})
 
 	app.Synth(nil)
 }

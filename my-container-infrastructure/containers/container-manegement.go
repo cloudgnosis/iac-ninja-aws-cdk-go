@@ -5,6 +5,7 @@ package containers
 
 import (
 	"fmt"
+	appscale "github.com/aws/aws-cdk-go/awscdk/v2/awsapplicationautoscaling"
 	ec2 "github.com/aws/aws-cdk-go/awscdk/v2/awsec2"
 	ecs "github.com/aws/aws-cdk-go/awscdk/v2/awsecs"
 	ecspatterns "github.com/aws/aws-cdk-go/awscdk/v2/awsecspatterns"
@@ -84,4 +85,29 @@ func NewLoadBalancedService(
 		ListenerPort:       port,
 	})
 	return service
+}
+
+type ScalingThreshold struct {
+	Percent *float64
+}
+
+type ServiceScalingConfig struct {
+	MinCount *float64
+	MaxCount *float64
+	ScaleCpuTarget *ScalingThreshold
+	ScaleMemoryTarget *ScalingThreshold
+}
+
+func SetServiceScaling(service ecs.FargateService, config *ServiceScalingConfig) {
+	scaling := service.AutoScaleTaskCount( &appscale.EnableScalingProps{
+		MinCapacity: config.MinCount,
+		MaxCapacity: config.MaxCount,
+	})
+
+	scaling.ScaleOnCpuUtilization(jsii.String("CpuScaling"), &ecs.CpuUtilizationScalingProps{
+		TargetUtilizationPercent: config.ScaleCpuTarget.Percent,
+	})
+	scaling.ScaleOnMemoryUtilization(jsii.String("MemoryScaling"), &ecs.MemoryUtilizationScalingProps{
+		TargetUtilizationPercent: config.ScaleMemoryTarget.Percent,
+	})
 }

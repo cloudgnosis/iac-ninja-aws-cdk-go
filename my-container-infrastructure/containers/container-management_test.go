@@ -146,7 +146,7 @@ func TestFargateLoadbalancedServiceWithoutPublicAccess(t *testing.T) {
 	stack, cluster, taskdef := setupServiceTest()
 	port, desiredCount := jsii.Number(80), jsii.Number(1)
 
-	NewLoadBalancedService(stack, jsii.String("test-service"), cluster, taskdef, port, desiredCount, nil, nil)
+	NewLoadBalancedService(stack, jsii.String("test-service"), cluster, taskdef, port, desiredCount, jsii.Bool(false), nil)
 
 	template := assertions.Template_FromStack(stack)
 
@@ -155,4 +155,52 @@ func TestFargateLoadbalancedServiceWithoutPublicAccess(t *testing.T) {
 		"Type":   jsii.String("application"),
 		"Scheme": jsii.String("internal"),
 	})
+}
+
+func TestScalingSettingsForLoadBalancedService(t *testing.T) {
+	stack, cluster, taskdef := setupServiceTest()
+	port, desiredCount := jsii.Number(80), jsii.Number(2)
+
+	service := NewLoadBalancedService(stack, jsii.String("test-service"), cluster, taskdef, port, desiredCount, jsii.Bool(false), nil)
+
+	config := ServiceScalingConfig{ 
+		MinCount: jsii.Number(1),
+		MaxCount: jsii.Number(5),
+		ScaleCpuTarget: &ScalingThreshold{ Percent: jsii.Number(50)},
+		ScaleMemoryTarget: &ScalingThreshold{ Percent: jsii.Number(50)},
+	}
+
+	SetServiceScaling(service.Service(), &config)
+
+	scaleResource := assertions.NewCapture(nil)
+	template := assertions.Template_FromStack(stack)
+	template.ResourceCountIs(jsii.String("AWS::ApplicationAutoScaling::ScalableTarget"), jsii.Number(1))
+	template.HasResourceProperties(jsii.String("AWS::ApplicationAutoScaling::ScalableTarget"), &map[string]interface{} {
+		"MaxCapacity": config.MaxCount,
+		"MinCapacity": config.MinCount,
+		"ResourceId": scaleResource,
+		"ScalableDimension": jsii.String("ecs:service:DesiredCount"),
+		"ServiceNamespace": jsii.String("ecs"),
+	})
+
+	template.ResourceCountIs(jsii.String("AWS::ApplicationAutoScaling::ScalingPolicy"), jsii.Number(2))
+	template.HasResourceProperties(jsii.String("AWS::ApplicationAutoScaling::ScalingPolicy"), &map[string]interface{} {
+		"PolicyType": jsii.String("TargetTrackingScaling"),
+		"TargetTrackingScalingPolicyConfiguration": assertions.Match_ObjectLike(&map[string]interface{} {
+			"PredefinedMetricSpecification": assertions.Match_ObjectEquals(&map[string]interface{} {
+				"PredefinedMetricType": jsii.String("ECSServiceAverageCPUUtilization"),
+			}),
+			"TargetValue": config.ScaleCpuTarget.Percent,
+		}),
+	})
+	template.HasResourceProperties(jsii.String("AWS::ApplicationAutoScaling::ScalingPolicy"), &map[string]interface{} {
+		"PolicyType": jsii.String("TargetTrackingScaling"),
+		"TargetTrackingScalingPolicyConfiguration": assertions.Match_ObjectLike(&map[string]interface{} {
+			"PredefinedMetricSpecification": assertions.Match_ObjectEquals(&map[string]interface{} {
+				"PredefinedMetricType": jsii.String("ECSServiceAverageMemoryUtilization"),
+			}),
+			"TargetValue": config.ScaleMemoryTarget.Percent,
+		}),
+	})
+
 }
