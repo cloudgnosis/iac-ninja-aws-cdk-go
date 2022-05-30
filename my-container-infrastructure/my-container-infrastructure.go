@@ -17,9 +17,20 @@ func main() {
 		Env: env(),
 	})
 
-	vpc := ec2.Vpc_FromLookup(stack, jsii.String("vpc"), &ec2.VpcLookupOptions {
-		IsDefault: jsii.Bool(true),
-	})
+	var vpc ec2.IVpc
+	maybeVpcName := app.Node().TryGetContext(jsii.String("vpcname"))
+	if maybeVpcName == nil {
+		vpc = ec2.NewVpc(stack, jsii.String("vpc"), &ec2.VpcProps{
+			VpcName: jsii.String("my-vpc"),
+			NatGateways: jsii.Number(1),
+			MaxAzs: jsii.Number(2),
+		})
+	} else {
+		vpc = ec2.Vpc_FromLookup(stack, jsii.String("vpc"), &ec2.VpcLookupOptions {
+			VpcName: jsii.String(maybeVpcName.(string)),
+		})
+	}
+
 
 	var id = "my-test-cluster"
 	cluster := containers.NewCluster(stack, jsii.String(id), vpc)
