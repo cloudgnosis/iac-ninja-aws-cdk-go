@@ -7,6 +7,7 @@ import (
 	"fmt"
 	ec2 "github.com/aws/aws-cdk-go/awscdk/v2/awsec2"
 	ecs "github.com/aws/aws-cdk-go/awscdk/v2/awsecs"
+	ecspatterns "github.com/aws/aws-cdk-go/awscdk/v2/awsecspatterns"
 	logs "github.com/aws/aws-cdk-go/awscdk/v2/awslogs"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
@@ -21,14 +22,15 @@ func NewCluster(scope constructs.Construct, id *string, vpc ec2.IVpc) ecs.Cluste
 
 // Configuration fo task definition
 type TaskConfig struct {
-	Cpu *float64
+	Cpu           *float64
 	MemoryLimitMB *float64
-	Family *string
+	Family        *string
 }
 
 // Configuration for container image
 type ContainerConfig struct {
 	DockerhubImage *string
+	TcpPorts       []*float64
 }
 
 // Add an ECS task definition
@@ -37,56 +39,49 @@ func NewTaskDefinitionWithContainer(
 	id *string,
 	taskConfig TaskConfig,
 	containerConfig ContainerConfig) ecs.FargateTaskDefinition {
-		taskdef := ecs.NewFargateTaskDefinition(scope, id, &ecs.FargateTaskDefinitionProps{
-			Cpu: taskConfig.Cpu,
-			MemoryLimitMiB: taskConfig.MemoryLimitMB,
-			Family: taskConfig.Family,
-		});
+	taskdef := ecs.NewFargateTaskDefinition(scope, id, &ecs.FargateTaskDefinitionProps{
+		Cpu:            taskConfig.Cpu,
+		MemoryLimitMiB: taskConfig.MemoryLimitMB,
+		Family:         taskConfig.Family,
+	})
 
-		image := ecs.ContainerImage_FromRegistry(containerConfig.DockerhubImage, nil)
-		logdriver := ecs.LogDriver_AwsLogs(&ecs.AwsLogDriverProps{
-			StreamPrefix: taskConfig.Family,
-			LogRetention: logs.RetentionDays_ONE_DAY,
-		})
-		containerId := jsii.String(fmt.Sprintf("container-%s", *containerConfig.DockerhubImage))
-		taskdef.AddContainer(containerId, &ecs.ContainerDefinitionOptions{
-			Image: image,
-			Logging: logdriver,
-		 })
+	image := ecs.ContainerImage_FromRegistry(containerConfig.DockerhubImage, nil)
+	logdriver := ecs.LogDriver_AwsLogs(&ecs.AwsLogDriverProps{
+		StreamPrefix: taskConfig.Family,
+		LogRetention: logs.RetentionDays_ONE_DAY,
+	})
+	containerId := jsii.String(fmt.Sprintf("container-%s", *containerConfig.DockerhubImage))
+	containerdef := taskdef.AddContainer(containerId, &ecs.ContainerDefinitionOptions{
+		Image:   image,
+		Logging: logdriver,
+	})
+
+	for _, port := range containerConfig.TcpPorts {
+		containerdef.AddPortMappings(&ecs.PortMapping{ContainerPort: port, Protocol: ecs.Protocol_TCP})
+	}
 
 	return taskdef
 }
 
-func NewService(
+func NewLoadBalancedService(
 	scope constructs.Construct,
 	id *string,
 	cluster ecs.Cluster,
 	taskDef ecs.FargateTaskDefinition,
 	port *float64,
 	desiredCount *float64,
-	assignPublicIp *bool,
-	serviceName *string) ecs.FargateService {
-		sgid := fmt.Sprintf("%s-security-group", *id)
-		sgdesc := "Security group for service "
-		if serviceName != nil {
-			sgdesc += *serviceName
-		}
-		sg := ec2.NewSecurityGroup(scope, jsii.String(sgid), &ec2.SecurityGroupProps{
-			Description: jsii.String(sgdesc),
-			Vpc: cluster.Vpc(),
-		})
-		sg.AddIngressRule(ec2.Peer_AnyIpv4(), ec2.Port_Tcp(port), nil, nil)
-
-		service := ecs.NewFargateService(scope, id, &ecs.FargateServiceProps{
-			Cluster: cluster,
-			TaskDefinition: taskDef,
-			DesiredCount: desiredCount,
-			ServiceName: serviceName,
-			SecurityGroups: &[]ec2.ISecurityGroup{ sg },
-			CircuitBreaker: &ecs.DeploymentCircuitBreaker{
-				Rollback: jsii.Bool(true),
-			},
-			AssignPublicIp: assignPublicIp,
-		})
-		return service
-	}
+	publicEndpoint *bool,
+	serviceName *string) ecspatterns.ApplicationLoadBalancedFargateService {
+	service := ecspatterns.NewApplicationLoadBalancedFargateService(scope, id, &ecspatterns.ApplicationLoadBalancedFargateServiceProps{
+		Cluster:        cluster,
+		TaskDefinition: taskDef,
+		DesiredCount:   desiredCount,
+		ServiceName:    serviceName,
+		CircuitBreaker: &ecs.DeploymentCircuitBreaker{
+			Rollback: jsii.Bool(true),
+		},
+		PublicLoadBalancer: publicEndpoint,
+		ListenerPort:       port,
+	})
+	return service
+}

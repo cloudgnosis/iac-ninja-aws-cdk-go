@@ -1,15 +1,14 @@
 package containers
 
 import (
-	"testing"
-	"strconv"
 	cdk "github.com/aws/aws-cdk-go/awscdk/v2"
+	assertions "github.com/aws/aws-cdk-go/awscdk/v2/assertions"
 	ec2 "github.com/aws/aws-cdk-go/awscdk/v2/awsec2"
 	ecs "github.com/aws/aws-cdk-go/awscdk/v2/awsecs"
-	assertions "github.com/aws/aws-cdk-go/awscdk/v2/assertions"
 	"github.com/aws/jsii-runtime-go"
+	"strconv"
+	"testing"
 )
-
 
 func TestEcsClusterDefinedExistingVpc(t *testing.T) {
 	stack := cdk.NewStack(nil, nil, nil)
@@ -24,13 +23,12 @@ func TestEcsClusterDefinedExistingVpc(t *testing.T) {
 	}
 }
 
-
 func TestEcsFargateTaskDefinitionDefined(t *testing.T) {
 	stack := cdk.NewStack(nil, nil, nil)
 	cpuval, memval, familyval := jsii.Number(512), jsii.Number(1024), jsii.String("test")
-	taskCfg := TaskConfig { Cpu: cpuval, MemoryLimitMB: memval, Family: familyval }
+	taskCfg := TaskConfig{Cpu: cpuval, MemoryLimitMB: memval, Family: familyval}
 	imageName := jsii.String("httpd")
-	containerCfg := ContainerConfig { DockerhubImage: imageName }
+	containerCfg := ContainerConfig{DockerhubImage: imageName, TcpPorts: []*float64{jsii.Number(80)}}
 
 	taskdef := NewTaskDefinitionWithContainer(stack, jsii.String("test-taskdef"), taskCfg, containerCfg)
 
@@ -38,7 +36,7 @@ func TestEcsFargateTaskDefinitionDefined(t *testing.T) {
 		t.Errorf("Expected task definition to be Fargate compatible, but it isn't")
 	}
 	gotItem := false
-	for _,item := range *stack.Node().Children() {
+	for _, item := range *stack.Node().Children() {
 		if item == taskdef {
 			gotItem = true
 			break
@@ -48,23 +46,21 @@ func TestEcsFargateTaskDefinitionDefined(t *testing.T) {
 		t.Errorf("Excpected Task Defintion to be in stack, but it isn't")
 	}
 
-
 	template := assertions.Template_FromStack(stack)
 	template.ResourceCountIs(jsii.String("AWS::ECS::TaskDefinition"), jsii.Number(1))
-	template.HasResourceProperties(jsii.String("AWS::ECS::TaskDefinition"), &map[string]interface{} {
-		"Cpu": jsii.String(strconv.FormatInt(int64(*cpuval), 10)), // Convert to string instead of float64, due to buggy CDK
+	template.HasResourceProperties(jsii.String("AWS::ECS::TaskDefinition"), &map[string]interface{}{
+		"Cpu":    jsii.String(strconv.FormatInt(int64(*cpuval), 10)), // Convert to string instead of float64, due to buggy CDK
 		"Memory": jsii.String(strconv.FormatInt(int64(*memval), 10)), // Convert to string instead of float64, due to buggy CDK
 		"Family": familyval,
 	})
 }
 
-
 func TestContainerDefinitionAddedToTaskDefinition(t *testing.T) {
 	stack := cdk.NewStack(nil, nil, nil)
 	cpuval, memval, familyval := jsii.Number(512), jsii.Number(1024), jsii.String("test")
-	taskCfg := TaskConfig { Cpu: cpuval, MemoryLimitMB: memval, Family: familyval }
+	taskCfg := TaskConfig{Cpu: cpuval, MemoryLimitMB: memval, Family: familyval}
 	imageName := jsii.String("httpd")
-	containerCfg := ContainerConfig { DockerhubImage: imageName }
+	containerCfg := ContainerConfig{DockerhubImage: imageName, TcpPorts: []*float64{jsii.Number(80)}}
 
 	taskdef := NewTaskDefinitionWithContainer(stack, jsii.String("test-taskdef"), taskCfg, containerCfg)
 
@@ -74,7 +70,7 @@ func TestContainerDefinitionAddedToTaskDefinition(t *testing.T) {
 	}
 	if containerDef.ImageName() != nil && *containerDef.ImageName() != *imageName {
 		t.Errorf("Expected task definition default container to have image name %s, but got %s",
-	             *imageName, *containerDef.ImageName())
+			*imageName, *containerDef.ImageName())
 	}
 
 	// Not needed with the test above, included for historical purposes
@@ -88,25 +84,24 @@ func TestContainerDefinitionAddedToTaskDefinition(t *testing.T) {
 	})
 }
 
-
 func setupServiceTest() (cdk.Stack, ecs.Cluster, ecs.TaskDefinition) {
 	stack := cdk.NewStack(nil, nil, nil)
 	vpc := ec2.NewVpc(stack, jsii.String("vpc"), nil)
 	cluster := NewCluster(stack, jsii.String("test-cluster"), vpc)
 	cpuval, memval, familyval := jsii.Number(512), jsii.Number(1024), jsii.String("test")
-	taskCfg := TaskConfig { Cpu: cpuval, MemoryLimitMB: memval, Family: familyval }
+	taskCfg := TaskConfig{Cpu: cpuval, MemoryLimitMB: memval, Family: familyval}
 	imageName := jsii.String("httpd")
-	containerCfg := ContainerConfig { DockerhubImage: imageName }
+	containerCfg := ContainerConfig{DockerhubImage: imageName, TcpPorts: []*float64{jsii.Number(80)}}
 
 	taskdef := NewTaskDefinitionWithContainer(stack, jsii.String("test-taskdef"), taskCfg, containerCfg)
 	return stack, cluster, taskdef
 }
 
-func TestFargateServiceWithMandatoryProperties(t *testing.T) {
+func TestFargateLoadbalancedServiceWithMandatoryProperties(t *testing.T) {
 	stack, cluster, taskdef := setupServiceTest()
 	port, desiredCount := jsii.Number(80), jsii.Number(1)
 
-	service := NewService(stack, jsii.String("test-service"), cluster, taskdef, port, desiredCount, nil, nil)
+	service := NewLoadBalancedService(stack, jsii.String("test-service"), cluster, taskdef, port, desiredCount, nil, nil)
 
 	if service.Cluster() != cluster {
 		t.Errorf("Service cluster is not the same as the created cluster")
@@ -119,25 +114,45 @@ func TestFargateServiceWithMandatoryProperties(t *testing.T) {
 	template := assertions.Template_FromStack(stack)
 
 	template.ResourceCountIs(jsii.String("AWS::ECS::Service"), jsii.Number(1))
-	template.HasResourceProperties(jsii.String("AWS::ECS::Service"), &map[string]interface{} {
+	template.HasResourceProperties(jsii.String("AWS::ECS::Service"), &map[string]interface{}{
 		"DesiredCount": desiredCount,
-		"LaunchType": jsii.String("FARGATE"),
-		"NetworkConfiguration": assertions.Match_ObjectLike(&map[string]interface{} {
-			"AwsvpcConfiguration": assertions.Match_ObjectLike(&map[string]interface{} {
+		"LaunchType":   jsii.String("FARGATE"),
+		"NetworkConfiguration": assertions.Match_ObjectLike(&map[string]interface{}{
+			"AwsvpcConfiguration": assertions.Match_ObjectLike(&map[string]interface{}{
 				"AssignPublicIp": jsii.String("DISABLED"),
-                "SecurityGroups": assertions.Match_ArrayWith(&[]interface{}{ sgCapture }),
+				"SecurityGroups": assertions.Match_ArrayWith(&[]interface{}{sgCapture}),
 			}),
 		}),
 	})
 
-	template.ResourceCountIs(jsii.String("AWS::EC2::SecurityGroup"), jsii.Number(1))
-	template.HasResourceProperties(jsii.String("AWS::EC2::SecurityGroup"),  &map[string]interface{} {
+	template.ResourceCountIs(jsii.String("AWS::ElasticLoadBalancingV2::LoadBalancer"), jsii.Number(1))
+	template.HasResourceProperties(jsii.String("AWS::ElasticLoadBalancingV2::LoadBalancer"), &map[string]interface{}{
+		"Type":   jsii.String("application"),
+		"Scheme": jsii.String("internet-facing"),
+	})
+
+	template.HasResourceProperties(jsii.String("AWS::EC2::SecurityGroup"), &map[string]interface{}{
 		"SecurityGroupIngress": assertions.Match_ArrayWith(&[]interface{}{
 			assertions.Match_ObjectLike(&map[string]interface{}{
-				"CidrIp": jsii.String("0.0.0.0/0"),
-				"FromPort": port,
+				"CidrIp":     jsii.String("0.0.0.0/0"),
+				"FromPort":   port,
 				"IpProtocol": jsii.String("tcp"),
 			}),
 		}),
+	})
+}
+
+func TestFargateLoadbalancedServiceWithoutPublicAccess(t *testing.T) {
+	stack, cluster, taskdef := setupServiceTest()
+	port, desiredCount := jsii.Number(80), jsii.Number(1)
+
+	NewLoadBalancedService(stack, jsii.String("test-service"), cluster, taskdef, port, desiredCount, nil, nil)
+
+	template := assertions.Template_FromStack(stack)
+
+	template.ResourceCountIs(jsii.String("AWS::ElasticLoadBalancingV2::LoadBalancer"), jsii.Number(1))
+	template.HasResourceProperties(jsii.String("AWS::ElasticLoadBalancingV2::LoadBalancer"), &map[string]interface{}{
+		"Type":   jsii.String("application"),
+		"Scheme": jsii.String("internal"),
 	})
 }

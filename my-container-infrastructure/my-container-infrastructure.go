@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"os"
 	cdk "github.com/aws/aws-cdk-go/awscdk/v2"
 	ec2 "github.com/aws/aws-cdk-go/awscdk/v2/awsec2"
+	"os"
 	//"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
 	"my-container-infrastructure/containers"
@@ -13,7 +13,7 @@ import (
 func main() {
 	app := cdk.NewApp(nil)
 
-	stack := cdk.NewStack(app, jsii.String("my-container-infrastructure"), &cdk.StackProps {
+	stack := cdk.NewStack(app, jsii.String("my-container-infrastructure"), &cdk.StackProps{
 		Env: env(),
 	})
 
@@ -21,38 +21,38 @@ func main() {
 	maybeVpcName := app.Node().TryGetContext(jsii.String("vpcname"))
 	if maybeVpcName == nil {
 		vpc = ec2.NewVpc(stack, jsii.String("vpc"), &ec2.VpcProps{
-			VpcName: jsii.String("my-vpc"),
+			VpcName:     jsii.String("my-vpc"),
 			NatGateways: jsii.Number(1),
-			MaxAzs: jsii.Number(2),
+			MaxAzs:      jsii.Number(2),
 		})
 	} else {
-		vpc = ec2.Vpc_FromLookup(stack, jsii.String("vpc"), &ec2.VpcLookupOptions {
+		vpc = ec2.Vpc_FromLookup(stack, jsii.String("vpc"), &ec2.VpcLookupOptions{
 			VpcName: jsii.String(maybeVpcName.(string)),
 		})
 	}
 
-
 	var id = "my-test-cluster"
 	cluster := containers.NewCluster(stack, jsii.String(id), vpc)
 
-	taskConfig := containers.TaskConfig {
-		Cpu: jsii.Number(512),
+	taskConfig := containers.TaskConfig{
+		Cpu:           jsii.Number(512),
 		MemoryLimitMB: jsii.Number(1024),
-		Family: jsii.String("webserver"),
+		Family:        jsii.String("webserver"),
 	}
-	containerConfig := containers.ContainerConfig {
+	containerConfig := containers.ContainerConfig{
 		DockerhubImage: jsii.String("httpd"),
+		TcpPorts:       []*float64{jsii.Number(80)},
 	}
 	taskDefId := fmt.Sprintf("taskdef-%s", *taskConfig.Family)
 	taskdef := containers.NewTaskDefinitionWithContainer(stack, &taskDefId, taskConfig, containerConfig)
 	serviceId := fmt.Sprintf("service-%s", *taskConfig.Family)
-	containers.NewService(
+	containers.NewLoadBalancedService(
 		stack,
 		&serviceId,
 		cluster,
-		taskdef, 
+		taskdef,
 		jsii.Number(80),
-		jsii.Number(0),
+		jsii.Number(2),
 		jsii.Bool(true),
 		nil)
 
@@ -61,7 +61,7 @@ func main() {
 
 func env() *cdk.Environment {
 	return &cdk.Environment{
-	  Account: jsii.String(os.Getenv("CDK_DEFAULT_ACCOUNT")),
-	  Region:  jsii.String(os.Getenv("CDK_DEFAULT_REGION")),
+		Account: jsii.String(os.Getenv("CDK_DEFAULT_ACCOUNT")),
+		Region:  jsii.String(os.Getenv("CDK_DEFAULT_REGION")),
 	}
 }
