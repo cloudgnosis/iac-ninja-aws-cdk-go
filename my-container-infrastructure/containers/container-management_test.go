@@ -5,6 +5,7 @@ import (
 	"strconv"
 	cdk "github.com/aws/aws-cdk-go/awscdk/v2"
 	ec2 "github.com/aws/aws-cdk-go/awscdk/v2/awsec2"
+	ecs "github.com/aws/aws-cdk-go/awscdk/v2/awsecs"
 	assertions "github.com/aws/aws-cdk-go/awscdk/v2/assertions"
 	"github.com/aws/jsii-runtime-go"
 )
@@ -57,7 +58,38 @@ func TestEcsFargateTaskDefinitionDefined(t *testing.T) {
 	})
 }
 
-func TestFargateServiceWithMandatoryProperties(t *testing.T) {
+
+func TestContainerDefinitionAddedToTaskDefinition(t *testing.T) {
+	stack := cdk.NewStack(nil, nil, nil)
+	cpuval, memval, familyval := jsii.Number(512), jsii.Number(1024), jsii.String("test")
+	taskCfg := TaskConfig { Cpu: cpuval, MemoryLimitMB: memval, Family: familyval }
+	imageName := jsii.String("httpd")
+	containerCfg := ContainerConfig { DockerhubImage: imageName }
+
+	taskdef := NewTaskDefinitionWithContainer(stack, jsii.String("test-taskdef"), taskCfg, containerCfg)
+
+	containerDef := taskdef.DefaultContainer()
+	if containerDef == nil {
+		t.Errorf("Expected task definition default container to be defined")
+	}
+	if containerDef.ImageName() != nil && *containerDef.ImageName() != *imageName {
+		t.Errorf("Expected task definition default container to have image name %s, but got %s",
+	             *imageName, *containerDef.ImageName())
+	}
+
+	// Not needed with the test above, included for historical purposes
+	template := assertions.Template_FromStack(stack)
+	template.HasResourceProperties(jsii.String("AWS::ECS::TaskDefinition"), &map[string]interface{}{
+		"ContainerDefinitions": assertions.Match_ArrayWith(&[]interface{}{
+			assertions.Match_ObjectLike(&map[string]interface{}{
+				"Image": imageName,
+			}),
+		}),
+	})
+}
+
+
+func setupServiceTest() (cdk.Stack, ecs.Cluster, ecs.TaskDefinition) {
 	stack := cdk.NewStack(nil, nil, nil)
 	vpc := ec2.NewVpc(stack, jsii.String("vpc"), nil)
 	cluster := NewCluster(stack, jsii.String("test-cluster"), vpc)
@@ -67,7 +99,11 @@ func TestFargateServiceWithMandatoryProperties(t *testing.T) {
 	containerCfg := ContainerConfig { DockerhubImage: imageName }
 
 	taskdef := NewTaskDefinitionWithContainer(stack, jsii.String("test-taskdef"), taskCfg, containerCfg)
+	return stack, cluster, taskdef
+}
 
+func TestFargateServiceWithMandatoryProperties(t *testing.T) {
+	stack, cluster, taskdef := setupServiceTest()
 	port, desiredCount := jsii.Number(80), jsii.Number(1)
 
 	service := NewService(stack, jsii.String("test-service"), cluster, taskdef, port, desiredCount, nil, nil)
@@ -101,35 +137,6 @@ func TestFargateServiceWithMandatoryProperties(t *testing.T) {
 				"CidrIp": jsii.String("0.0.0.0/0"),
 				"FromPort": port,
 				"IpProtocol": jsii.String("tcp"),
-			}),
-		}),
-	})
-}
-
-func TestContainerDefinitionAddedToTaskDefinition(t *testing.T) {
-	stack := cdk.NewStack(nil, nil, nil)
-	cpuval, memval, familyval := jsii.Number(512), jsii.Number(1024), jsii.String("test")
-	taskCfg := TaskConfig { Cpu: cpuval, MemoryLimitMB: memval, Family: familyval }
-	imageName := jsii.String("httpd")
-	containerCfg := ContainerConfig { DockerhubImage: imageName }
-
-	taskdef := NewTaskDefinitionWithContainer(stack, jsii.String("test-taskdef"), taskCfg, containerCfg)
-
-	containerDef := taskdef.DefaultContainer()
-	if containerDef == nil {
-		t.Errorf("Expected task definition default container to be defined")
-	}
-	if containerDef.ImageName() != nil && *containerDef.ImageName() != *imageName {
-		t.Errorf("Expected task definition default container to have image name %s, but got %s",
-	             *imageName, *containerDef.ImageName())
-	}
-
-	// Not needed with the test above, included for historical purposes
-	template := assertions.Template_FromStack(stack)
-	template.HasResourceProperties(jsii.String("AWS::ECS::TaskDefinition"), &map[string]interface{}{
-		"ContainerDefinitions": assertions.Match_ArrayWith(&[]interface{}{
-			assertions.Match_ObjectLike(&map[string]interface{}{
-				"Image": imageName,
 			}),
 		}),
 	})
